@@ -4,6 +4,6 @@ torrents
 venv
 logs
 !.env.example
-
+tool/__pycache__
 
 
