@@ -50,6 +50,6 @@ if __name__ == '__main__':
         exit(-1)
 
     # 处理种子
-    qb.get_torrents().delete_torrent()
+    qb.get_torrents().handle_torrents().delete_torrent()
 
     print('Done')
