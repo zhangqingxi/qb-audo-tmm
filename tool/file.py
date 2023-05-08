@@ -3,7 +3,6 @@
 """
 import json
 import os
-import types
 
 
 class File:
@@ -24,13 +23,13 @@ class File:
         if not os.path.exists(self.dirname):
             os.makedirs(self.dirname)
 
-    """
+    '''
     读取文件
-    """
+    '''
     def get_file(self, filename=None):
         filename = self.dirname + '/' + filename
         if os.path.exists(filename):
-            f = open(filename, 'r', encoding="utf-8")
+            f = open(filename, 'r', encoding='utf-8')
             content = f.read()
             if str(filename).find('.json') > 1:
                 self.response = json.loads(content)
@@ -39,13 +38,13 @@ class File:
 
         return self
 
-    """
+    '''
     写入文件
-    """
+    '''
     def write_file(self, filename=None, data=None):
         filename = self.dirname + '/' + filename
 
-        with open(filename, 'w', encoding="utf-8") as f:
+        with open(filename, 'w', encoding='utf-8') as f:
             if isinstance(data, dict):
                 json.dump(data, f, indent=4, ensure_ascii=False)
             else:

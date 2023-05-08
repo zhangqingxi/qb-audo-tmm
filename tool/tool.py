@@ -75,6 +75,23 @@ class Tool:
         return self
 
     """
+    数据转换byte
+    :param unit 单位
+    """
+    def to_byte(self, unit=None):
+        if unit == 'TB':
+            self.value = self.number * 1024 * 1024 * 1024 * 1024
+        elif unit == 'GB':
+            self.value = self.number * 1024 * 1024 * 1024
+        elif unit == 'MB':
+            self.value = self.number * 1024 * 1024
+        elif unit == 'KB':
+            self.value = self.number * 1024
+        else:
+            self.value = self.number
+        return self
+
+    """
     发送通知到TG
     :param decimal 保留小数位
     """
@@ -107,11 +124,11 @@ class Tool:
             data += '==========================\r\n' + text
         file.write_file(filename=filename, data=data)
 
-        # api_url = 'https://api.telegram.org/bot' + os.getenv(self.qb_name + '_TG_TOKEN') + '/sendMessage'
-        # data = {
-        #     'chat_id': os.getenv(self.qb_name + '_TG_CHAT_ID'),
-        #     'text': text,
-        # }
-        # Request(url=api_url, data=data).curl()
+        api_url = 'https://api.telegram.org/bot' + os.getenv(self.qb_name + '_TG_TOKEN') + '/sendMessage'
+        data = {
+            'chat_id': os.getenv(self.qb_name + '_TG_CHAT_ID'),
+            'text': text,
+        }
+        Request(url=api_url, data=data).curl()
 
 

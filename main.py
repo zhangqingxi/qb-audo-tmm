@@ -1,11 +1,9 @@
-"""Main module."""
 import argparse
 import os.path
 import sys
 from dotenv import load_dotenv
 
 sys.path.append(os.path.dirname((os.path.dirname(os.path.abspath(__file__)))))
-
 from tool.qb import *
 
 qb_name = None
@@ -39,20 +37,19 @@ def args():
 
 if __name__ == '__main__':
     args()
-    qb = Qb(qb_name=qb_name, cookie='SID=aElj9ZGSEQdEVCalK+YMsM6N8hcX6qWq')
-    # qb.login(username=username, password=password)
-    #
-    # tries = 1
-    # if qb.cookie is None and tries <= 5:
-    #     tries = tries + 1
-    #     qb.login()
-    #
-    # if qb.cookie is None:
-    #     print('登录失败，请检查用户信息')
-    #     exit(-1)
+    qb = Qb(qb_name=qb_name)
+    qb.login()
 
-    # 获取种子
-    qb.get_torrents().handle_torrents()
+    tries = 1
+    if qb.cookie is None and tries <= 5:
+        tries = tries + 1
+        qb.login()
 
-    print("Done")
+    if qb.cookie is None:
+        print('登录失败，请检查用户信息')
+        exit(-1)
 
+    # 处理种子
+    qb.get_torrents().delete_torrent()
+
+    print('Done')
