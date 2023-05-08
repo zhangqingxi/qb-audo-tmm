@@ -123,7 +123,6 @@ class Tool:
         else:
             data += '==========================\r\n' + text
         file.write_file(filename=filename, data=data)
-
         api_url = 'https://api.telegram.org/bot' + os.getenv(self.qb_name + '_TG_TOKEN') + '/sendMessage'
         data = {
             'chat_id': os.getenv(self.qb_name + '_TG_CHAT_ID'),

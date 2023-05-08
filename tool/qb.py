@@ -270,21 +270,21 @@ class Qb:
             # 10分钟不发车
             if int(time.time()) - row['added_on'] > 10 * 60 and row['state'] == 'stalledDL':
                 self.delete(row['hash'])
-                Tool().send_message(item=row, rule='10分钟不发车')
+                Tool(qb_name=self.qb_name).send_message(item=row, rule='10分钟不发车')
                 row['state'] = 'delete'
                 continue
 
             # 种子错误
             if row['state'] == 'error':
                 self.delete(row['hash'])
-                Tool().send_message(item=row, rule='种子错误')
+                Tool(qb_name=self.qb_name).send_message(item=row, rule='种子错误')
                 row['state'] = 'delete'
                 continue
 
             # 暂停种子已超过2个小时的
             if row['state'] == 'pausedDL' and int(time.time()) - row['added_on'] > 2 * 60 * 60:
                 self.delete(row['hash'])
-                Tool().send_message(item=row, rule='暂停种子已超过2个小时')
+                Tool(qb_name=self.qb_name).send_message(item=row, rule='暂停种子已超过2个小时')
                 row['state'] = 'delete'
                 continue
 
@@ -303,7 +303,7 @@ class Qb:
                     # 最近10次平均速度小于1M
                     if avg_update_speed < 1:
                         self.delete(row['hash'])
-                        Tool().send_message(item=row, rule='最近10次平均速度小于1M')
+                        Tool(qb_name=self.qb_name).send_message(item=row, rule='最近10次平均速度小于1M')
                         row['state'] = 'delete'
                         continue
         return self
