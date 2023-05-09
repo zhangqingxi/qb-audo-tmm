@@ -48,7 +48,10 @@ class File:
     '''
     def write_file(self, filename=None, data=None):
         filename = self.dirname + '/' + filename
-
+        
+        # 替换引号
+        filename = filename.replace("\'", "")
+        
         with open(filename, 'w', encoding='utf-8') as f:
             if isinstance(data, dict):
                 json.dump(data, f, indent=4, ensure_ascii=False)

@@ -35,7 +35,9 @@ def get_torrent_group(name=None):
     group = name.rsplit('-', 1)
     if len(group) == 2 and len(group[1].rsplit('@', 1)) == 2:
         group = group[1].rsplit('@', 1)
-    return group[1]
+    if len(group) == 2:   
+        return group[1]
+    return name    
 
 
 class Qb:
@@ -62,7 +64,7 @@ class Qb:
     # 活跃种子状态集合
     active_torrent_state = []
     # 限制拆包选种大小
-    limit_split_torrent_download_size = []
+    limit_split_torrent_download_size = 0
     # 限制黑种选种大小
     limit_black_torrent_download_size = 0
     # 限制选种大小
@@ -90,11 +92,8 @@ class Qb:
         self.less_disk_space = int(os.getenv(qb_name + '_LESS_DOSK_SPACE'))
         self.limit_active_torrent_num = int(os.getenv(qb_name + '_LIMIT_ACTIVE_TORRENT_NUM'))
         self.active_torrent_state = ['uploading', 'downloading', 'stalledDL', 'stalledUP', 'forcedUP', 'forcedDL']
-        self.limit_split_torrent_download_size = str(
-            os.getenv(self.qb_name + '_LIMIT_SPLIT_TORRENT_DOWNLOAD_SIZE')).split(',')
-
+        self.limit_split_torrent_download_size = int(os.getenv(self.qb_name + '_LIMIT_SPLIT_TORRENT_DOWNLOAD_SIZE'))
         self.limit_black_torrent_download_size = int(os.getenv(self.qb_name + '_LIMIT_BLACK_TORRENT_DOWNLOAD_SIZE'))
-
         self.limit_torrent_download_size = int(os.getenv(self.qb_name + '_LIMIT_TORRENT_DOWNLOAD_SIZE'))
         self.black_torrent_domain = os.getenv('BLACK_TORRENT_DOMAIN').split(',')
         self.hr_domain = os.getenv('HR_DOMAIN').split(',')
@@ -253,18 +252,22 @@ class Qb:
                     
                 # 文件可拆分
                 else:
-                    download_index = self.get_download_content_index(content=content)
-                    if download_index != '':
-                        no_download_index = []
-                        for item in content:
-                            if str(item['index']) not in download_index:
-                                no_download_index.append(str(item['index']))
-                        no_download_index = "|".join(no_download_index)
-                        self.change_files_content_download(torrent_hash=row['hash'], index=no_download_index, priority=0)
-                        self.resume(torrent_hash=row['hash'])
+                    # 属于黑种站点, 或者文件超过允许下载的范围
+                    if row['domain'] in self.black_torrent_domain or row['size'] > Tool(number=self.limit_torrent_download_size).to_byte('GB').value:
+                        download_index = self.get_download_content_index(content=content)
+                        if len(download_index) > 0:
+                            no_download_index = []
+                            for item in content:
+                                if item['index'] not in download_index:
+                                    no_download_index.append(str(item['index']))
+                            no_download_index = "|".join(no_download_index)
+                            self.change_files_content_download(torrent_hash=row['hash'], index=no_download_index, priority=0)
+                            self.resume(torrent_hash=row['hash'])
+                        else:
+                            Tool(qb_name=self.qb_name).send_message(item=row, rule=f'文件可拆分, 但没有拆出适合下载的文件')
+                            self.delete(torrent_hash=row['hash'])
                     else:
-                        Tool(qb_name=self.qb_name).send_message(item=row, rule=f'文件可拆分, 但没有拆出适合下载的文件')
-                        self.delete(torrent_hash=row['hash'])
+                        self.resume(torrent_hash=row['hash'])
         return self
     
     
@@ -309,7 +312,7 @@ class Qb:
                     Tool(qb_name=self.qb_name).send_message(item=row, rule='HR种子跳车')
                     row['state'] = 'delete'
                     continue
-    
+            
             # 查询前10次上报的平均上传速度
             if row['state'] in self.active_torrent_state:
                 file = File(dirname='torrents', category=row['category'])
@@ -372,49 +375,28 @@ class Qb:
     :param content_index 文件内容序号
     '''
  
-    def get_download_content_index(self, content=None, least_size=0, content_index=None):
-        if content_index is None:
-            content_index = []
-        least_content = self.get_least_content(data=content, index=content_index)
-        if least_content is not None:
-            least_size += least_content['size']
-            content_index.append(str(least_content['index']))
-            if Tool(number=int(self.limit_split_torrent_download_size[0])).to_byte(unit='GB').value > least_size:
-                self.get_download_content_index(content=content, least_size=least_size, content_index=content_index)
-    
-            # 剩余空间不足与下载
-            if self.free_space - least_size <= Tool(number=self.less_disk_space).to_byte('GB').value:
-                return ''
-    
-        return '|'.join(content_index)
-    
-    
-    '''
-    获取最小的的一个文件
-    :param data 种子文件内容数据
-    :param index 需要排除的文件序号
-    '''
-    
-    def get_least_content(self, data=None, index=None):
-        item = None
-        for row in data:
-            if index is not None and str(row['index']) in index:
+    def get_download_content_index(self, content=None, least_size=0, content_index=None, time=1):
+        limit_size = Tool(number=int(self.limit_split_torrent_download_size)).to_byte(unit='GB').value
+        # 文件从小到大排序
+        content.sort(key=lambda x: x['size'])
+        content_index = []
+        least_size = 0
+        for row in content:
+            
+            # 最小文件/最大文件过滤
+            if 500 * 1024 * 1024 >= row['size'] or row['size'] >= limit_size:
                 continue
-    
-            # 过滤限制大 小100或大于最大拆包允许下载大小值
-            limit_split_torrent_download_size = Tool(number=int(self.limit_split_torrent_download_size[1])).to_byte(
-                unit='GB').value
-            if 100 * 1024 >= row['size'] or row['size'] >= limit_split_torrent_download_size:
-                continue
-    
-            if item is None:
-                item = row
-                continue
-    
-            if item['size'] > row['size']:
-                item = row
-    
-        return item
+            
+            # 文件上限
+            if least_size + row['size'] <= limit_size:
+                least_size += row['size']
+                content_index.append(str(row['index']))
+            
+        # 剩余空间不足以下载
+        if self.free_space - least_size <= Tool(number=self.less_disk_space).to_byte('GB').value:
+            return []
+
+        return content_index
     
     
     '''
@@ -456,15 +438,15 @@ class Qb:
                 'add_time': time_format(item['added_on']),
                 'completion_time': time_format(item['completion_on']),
                 'seeding_time': round(item['seeding_time'] / 60, 2),
-                'info': [info]
+                'info': []
             }
-        else:
+            
+        if len(info) > 0:   
             data['info'].append(info)
     
         file.write_file(filename=item['name'] + '.json', data=data)
     
         return True
-    
     
     '''
     CURL 请求
