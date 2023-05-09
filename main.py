@@ -8,6 +8,7 @@ from tool.qb import *
 
 qb_name = None
 
+
 # 解析参数
 def args():
     global qb_name
@@ -26,25 +27,8 @@ def args():
     load_dotenv(verbose=True)
 
 
-   
-   
-    
-
 if __name__ == '__main__':
     args()
-    
-    if qb_name == '1':
-        name = "Jane Austens Mafia 1998 The Crew 2000 1080p Blu-ray AVC DTS-HD MA 2.0"
-
-        groups = os.getenv('CHDBITS_HR_GROUP').split(',')
-        
-        
-        print(groups)
-        exit(1)
-
-    
-    
-    
     qb = Qb(qb_name=qb_name)
     qb.login()
 

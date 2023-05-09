@@ -10,7 +10,12 @@ class Request:
     url = None
     data = None
     response = {}
-
+    
+    '''
+    实例化
+    :param url 接口URL
+    :param data 接口数据
+    '''
     def __init__(self, url=None, data=None):
         self.url = url
         self.data = data

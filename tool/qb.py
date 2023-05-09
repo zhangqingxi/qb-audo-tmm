@@ -71,14 +71,14 @@ class Qb:
     black_torrent_domain = []
     # HR站点
     hr_domain = []
-
-    '''
-    已选择文件下载总空间大小  byte 字节
-    '''
+    # 所有官组
+    all_group = []
+    # 已选择文件下载总空间大小  byte 字节
     total_download_choose_file_size = 0
 
     '''
-    :param url 接口地址
+    实例化
+    :param qb_name 配置的下载器名称
     '''
 
     def __init__(self, qb_name=qb_name):
@@ -98,13 +98,10 @@ class Qb:
         self.limit_torrent_download_size = int(os.getenv(self.qb_name + '_LIMIT_TORRENT_DOWNLOAD_SIZE'))
         self.black_torrent_domain = os.getenv('BLACK_TORRENT_DOMAIN').split(',')
         self.hr_domain = os.getenv('HR_DOMAIN').split(',')
-        # token = os.getenv(qb_name + '_TG_TOKEN')
-        # chat_id = os.getenv(qb_name + '_TG_CHAT_ID')
+        self.all_group = os.getenv('ALL_GROUP').split(',')
 
     '''
     登录
-    :param username 用户名
-    :param password 用户密码
     '''
 
     def login(self):
@@ -122,7 +119,7 @@ class Qb:
     '''
     获取种子列表
     '''
-
+    
     def get_torrents(self):
         api_name = '/api/v2/torrents/info'
         self.curl_request(api_name=api_name)
@@ -152,6 +149,8 @@ class Qb:
 
     '''
     删除种子
+    :param torrent_hash 种子HASH
+    :param delete_files 是否连带文件一起删除
     '''
 
     def delete(self, torrent_hash=None, delete_files=None):
@@ -162,11 +161,13 @@ class Qb:
         }
         self.curl_request(api_name=api_name, data=data)
         if self.response['code'] == 200:
+            self.active_torrent_num -= 1
             return True
         return False
 
     '''
     继续种子
+    :param torrent_hash 种子HASH
     '''
 
     def resume(self, torrent_hash=None):
@@ -176,11 +177,14 @@ class Qb:
         }
         self.curl_request(api_name=api_name, data=data)
         if self.response['code'] == 200:
+            self.pause_torrent_num -= 1
+            self.active_torrent_num += 1
             return True
         return False
 
     '''
     暂停种子
+    :param torrent_hash 种子HASH
     '''
 
     def pause(self, torrent_hash=None):
@@ -190,11 +194,13 @@ class Qb:
         }
         self.curl_request(api_name=api_name, data=data)
         if self.response['code'] == 200:
+            self.pause_torrent_num += 1
             return True
         return False
 
     '''
     种子通用属性
+    :param torrent_hash 种子HASH
     '''
 
     def properties(self, torrent_hash=None):
@@ -206,7 +212,7 @@ class Qb:
         if self.response['code'] == 200:
             return json.loads(self.response['content'])
         return {}
-    
+
     '''
     处理种子
     '''
@@ -216,6 +222,7 @@ class Qb:
             category = str(row['category']).upper()
             # 拆包种子
             if row['state'] == 'pausedDL':
+                # 获取种子文件内容
                 content = self.torrent_content(torrent_hash=row['hash'])
                 # 文件不可拆分
                 if len(content) == 1:
@@ -232,15 +239,18 @@ class Qb:
                         self.delete(torrent_hash=row['hash'])
                         continue
 
-                    # 属于官种、且符合选种范围、剩余磁盘空间允许
-                    groups = os.getenv(category + '_GROUP').split(',')
+                    # 不属于热门官组、且符合选种范围、剩余磁盘空间允许
                     group = get_torrent_group(name=row['name'])
-                    if group is not None and group not in groups and row['size'] >= limit_torrent_download_size and self.free_space - row['size'] > Tool(
-                        number=self.less_disk_space).to_byte('GB').value:
-                        r = self.resume(torrent_hash=row['hash'])
-                        if r:
-                            self.pause_torrent_num -= 1
+                    if group is not None and group not in self.all_group:
+                        Tool(qb_name=self.qb_name).send_message(item=row, rule=f'文件不可拆分, 且文件不属于热门官组')
+                    self.delete(torrent_hash=row['hash'])
+                    continue
 
+                    # 符合文件大小
+                    if Tool(number=self.free_space).to_byte('GB').value - row['size'] > Tool(number=self.less_disk_space).to_byte('GB').value:
+                        self.resume(torrent_hash=row['hash'])
+                        continue
+                    
                 # 文件可拆分
                 else:
                     download_index = self.get_download_content_index(content=content)
@@ -251,19 +261,17 @@ class Qb:
                                 no_download_index.append(str(item['index']))
                         no_download_index = "|".join(no_download_index)
                         self.change_files_content_download(torrent_hash=row['hash'], index=no_download_index, priority=0)
-                        r = self.resume(torrent_hash=row['hash'])
-                        if r:
-                            self.pause_torrent_num -= 1
+                        self.resume(torrent_hash=row['hash'])
                     else:
                         Tool(qb_name=self.qb_name).send_message(item=row, rule=f'文件可拆分, 但没有拆出适合下载的文件')
                         self.delete(torrent_hash=row['hash'])
-                        continue
-        return self    
-
+        return self
+    
+    
     '''
     删种规则
     '''
-
+    
     def delete_torrent(self):
         # 活跃种子数小于给定值 不执行删种
         # if self.active_torrent_num < self.limit_active_torrent_num:
@@ -275,21 +283,21 @@ class Qb:
                 Tool(qb_name=self.qb_name).send_message(item=row, rule='10分钟不发车')
                 row['state'] = 'delete'
                 continue
-
+    
             # 种子错误
             if row['state'] == 'error':
                 self.delete(row['hash'])
                 Tool(qb_name=self.qb_name).send_message(item=row, rule='种子错误')
                 row['state'] = 'delete'
                 continue
-
+    
             # 暂停种子已超过2个小时的
             if row['state'] == 'pausedDL' and int(time.time()) - row['added_on'] > 2 * 60 * 60:
                 self.delete(row['hash'])
                 Tool(qb_name=self.qb_name).send_message(item=row, rule='暂停种子已超过2个小时')
                 row['state'] = 'delete'
                 continue
-
+    
             # HR种子跳车
             if row['domain'] in self.hr_domain:
                 category = str(row['category']).upper()
@@ -301,7 +309,7 @@ class Qb:
                     Tool(qb_name=self.qb_name).send_message(item=row, rule='HR种子跳车')
                     row['state'] = 'delete'
                     continue
-
+    
             # 查询前10次上报的平均上传速度
             if row['state'] in self.active_torrent_state:
                 file = File(dirname='torrents', category=row['category'])
@@ -312,9 +320,9 @@ class Qb:
                     for item in info:
                         upload_speed = item['upload_speed'] if len(str(item['upload_speed'])) == 1 else item['upload_speed'][:-3]
                         total_update_speed += float(upload_speed)
-
+    
                     avg_update_speed = round(total_update_speed / 10, 1)
-
+    
                     # 最近10次平均速度小于1M
                     if avg_update_speed < 1:
                         self.delete(row['hash'])
@@ -322,11 +330,14 @@ class Qb:
                         row['state'] = 'delete'
                         continue
         return self
-
+    
     '''
     更改文件内容下载
+    :param torrent_hash 种子HASH
+    :param index 种子文件序号
+    :param priority 下载权重
     '''
-
+    
     def change_files_content_download(self, torrent_hash=None, index=None, priority=None):
         api_name = '/api/v2/torrents/filePrio'
         data = {
@@ -338,11 +349,12 @@ class Qb:
         if self.response['code'] == 200:
             return True
         return False
-
+    
     '''
     种子内容
+    :param torrent_hash 种子HASH
     '''
-
+    
     def torrent_content(self, torrent_hash=None):
         api_name = '/api/v2/torrents/files'
         data = {
@@ -352,8 +364,14 @@ class Qb:
         if self.response['code'] == 200:
             return json.loads(self.response['content'])
         return {}
-
-    # 返回可下载的文件序号
+    
+    '''
+    返回可下载的文件序号
+    :param content 文件内容
+    :param least_size 文件内容大小
+    :param content_index 文件内容序号
+    '''
+ 
     def get_download_content_index(self, content=None, least_size=0, content_index=None):
         if content_index is None:
             content_index = []
@@ -363,42 +381,47 @@ class Qb:
             content_index.append(str(least_content['index']))
             if Tool(number=int(self.limit_split_torrent_download_size[0])).to_byte(unit='GB').value > least_size:
                 self.get_download_content_index(content=content, least_size=least_size, content_index=content_index)
-
+    
             # 剩余空间不足与下载
             if self.free_space - least_size <= Tool(number=self.less_disk_space).to_byte('GB').value:
                 return ''
-
+    
         return '|'.join(content_index)
-
+    
+    
     '''
     获取最小的的一个文件
+    :param data 种子文件内容数据
+    :param index 需要排除的文件序号
     '''
-
+    
     def get_least_content(self, data=None, index=None):
         item = None
         for row in data:
             if index is not None and str(row['index']) in index:
                 continue
-
+    
             # 过滤限制大 小100或大于最大拆包允许下载大小值
             limit_split_torrent_download_size = Tool(number=int(self.limit_split_torrent_download_size[1])).to_byte(
                 unit='GB').value
             if 100 * 1024 >= row['size'] or row['size'] >= limit_split_torrent_download_size:
                 continue
-
+    
             if item is None:
                 item = row
                 continue
-
+    
             if item['size'] > row['size']:
                 item = row
-
+    
         return item
-
+    
+    
     '''
     记录日志
+    :param item 种子数据
     '''
-
+    
     def log_content(self, item=None):
         info = {}
         if item['state'] in self.active_torrent_state:
@@ -416,12 +439,12 @@ class Qb:
                 'num_incomplete': item['num_incomplete'],
                 'num_leechs': item['num_leechs'],
             }
-
+    
         # 记录种子
         file = File(dirname='torrents', category=item['category'])
-
+    
         data = file.get_file(filename=item['name'] + '.json').response
-
+    
         if data is None:
             data = {
                 'name': item['name'],
@@ -437,15 +460,18 @@ class Qb:
             }
         else:
             data['info'].append(info)
-
+    
         file.write_file(filename=item['name'] + '.json', data=data)
-
+    
         return True
-
+    
+    
     '''
     CURL 请求
+    :param api_name 接口地址
+    :param data 数据
     '''
-
+    
     def curl_request(self, api_name=None, data=None):
         self.response = Request(url=self.url + api_name, data=data).curl(cookie=self.cookie).response
         return self

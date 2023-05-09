@@ -17,7 +17,8 @@ class Tool:
     text = None
 
     '''
-    数据数据量转换
+    实例化
+    :param qb_name 配置的下载器名称
     :param number 数值
     '''
     def __init__(self, qb_name=None, number=None):
@@ -93,7 +94,8 @@ class Tool:
 
     """
     发送通知到TG
-    :param decimal 保留小数位
+    :param item 种子内容
+    :param rule 删种规则
     """
     def send_message(self, item=None, rule=None):
         current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())

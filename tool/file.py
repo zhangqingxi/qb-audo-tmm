@@ -10,7 +10,9 @@ class File:
     response = None
 
     '''
+    实例化
     :param dirname 目录
+    :param category 分类目录
     '''
     def __init__(self, dirname=None, category=None):
         self.dirname = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -25,6 +27,7 @@ class File:
 
     '''
     读取文件
+    :param filename 文件名
     '''
     def get_file(self, filename=None):
         filename = self.dirname + '/' + filename
@@ -40,6 +43,8 @@ class File:
 
     '''
     写入文件
+    :param filename 文件名
+    :param data 写入的文件内容
     '''
     def write_file(self, filename=None, data=None):
         filename = self.dirname + '/' + filename
