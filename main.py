@@ -1,25 +1,16 @@
 import argparse
-import os.path
 import sys
+import os
 from dotenv import load_dotenv
 
 sys.path.append(os.path.dirname((os.path.dirname(os.path.abspath(__file__)))))
 from tool.qb import *
 
 qb_name = None
-base_url = None
-username = None
-password = None
-token = None
-chat_id = None
-disk_space = None
-less_disk_space = None
-limit_active_torrent_num = None
-
 
 # 解析参数
 def args():
-    global qb_name, base_url, username, password, token, chat_id, disk_space, less_disk_space, limit_active_torrent_num
+    global qb_name
     ARGP = argparse.ArgumentParser(
         description='这是一个自动化种子管理',
         add_help=False,
@@ -35,8 +26,25 @@ def args():
     load_dotenv(verbose=True)
 
 
+   
+   
+    
+
 if __name__ == '__main__':
     args()
+    
+    if qb_name == '1':
+        name = "Jane Austens Mafia 1998 The Crew 2000 1080p Blu-ray AVC DTS-HD MA 2.0"
+
+        groups = os.getenv('CHDBITS_HR_GROUP').split(',')
+        
+        
+        print(groups)
+        exit(1)
+
+    
+    
+    
     qb = Qb(qb_name=qb_name)
     qb.login()
 
