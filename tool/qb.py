@@ -220,7 +220,7 @@ class Qb:
         for row in self.torrents:
             category = str(row['category']).upper()
             # 拆包种子
-            if row['state'] == 'pausedDL':
+            if row['state'] == 'pausedDL' or row['hash'] == 'd0c8441737460cedddc5c0d0f729f88a0c0507f3':
                 # 获取种子文件内容
                 content = self.torrent_content(torrent_hash=row['hash'])
                 # 文件不可拆分
@@ -326,7 +326,7 @@ class Qb:
                     avg_update_speed = round(total_update_speed / 10, 1)
                     
                     # 最近10次平均速度小于1M
-                    if avg_update_speed < 1:
+                    if avg_update_speed < 1 * 1024 * 1024:
                         self.delete(row['hash'])
                         Tool(qb_name=self.qb_name).send_message(item=row, rule='最近10次平均速度小于1M')
                         row['state'] = 'delete'
@@ -389,7 +389,7 @@ class Qb:
             # 文件上限
             if least_size + row['size'] <= limit_size:
                 least_size += row['size']
-                content_index.append(str(row['index']))
+                content_index.append(row['index'])
             
         # 剩余空间不足以下载
         if self.free_space - least_size <= Tool(number=self.less_disk_space).to_byte('GB').value:
