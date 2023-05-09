@@ -317,15 +317,14 @@ class Qb:
             if row['state'] in self.active_torrent_state:
                 file = File(dirname='torrents', category=row['category'])
                 data = file.get_file(filename=row['name'] + '.json').response
-                if len(data['info']) > 10:
+                if data is not None and len(data['info']) > 10:
                     info = data['info'][len(data['info']) - 10:]
                     total_update_speed = 0
                     for item in info:
-                        upload_speed = item['upload_speed'] if len(str(item['upload_speed'])) == 1 else item['upload_speed'][:-3]
-                        total_update_speed += float(upload_speed)
+                        total_update_speed += float(item['upspeed'])
     
                     avg_update_speed = round(total_update_speed / 10, 1)
-    
+                    
                     # 最近10次平均速度小于1M
                     if avg_update_speed < 1:
                         self.delete(row['hash'])
@@ -409,14 +408,19 @@ class Qb:
         if item['state'] in self.active_torrent_state:
             info = {
                 'state': item['state'],
-                'completed': Tool(number=item['completed']).change_byte(2).text,
-                'uploaded': Tool(number=item['uploaded']).change_byte(2).text,
-                'downloaded': Tool(number=item['downloaded']).change_byte(2).text,
+                'completed': item['completed'],
+                'completed_text': Tool(number=item['completed']).change_byte(2).text,
+                'uploaded': item['uploaded'],
+                'uploaded_text': Tool(number=item['uploaded']).change_byte(2).text,
+                'downloaded': item['downloaded'],
+                'downloaded_text': Tool(number=item['downloaded']).change_byte(2).text,
                 'progress': round(item['progress'], 2),
                 'ratio': round(item['ratio'], 2),
                 'time_active': Tool(number=item['time_active']).change_second(2).text,
-                'upload_speed': Tool(number=item['upspeed']).change_byte(2).text,
-                'download_speed': Tool(number=item['dlspeed']).change_byte(2).text,
+                'upspeed': item['upspeed'],
+                'upspeed_text': Tool(number=item['upspeed']).change_byte(2).text,
+                'dlspeed': item['dlspeed'],
+                'dlspeed_text': Tool(number=item['dlspeed']).change_byte(2).text,
                 'num_complete': item['num_complete'],
                 'num_incomplete': item['num_incomplete'],
                 'num_leechs': item['num_leechs'],
@@ -437,7 +441,7 @@ class Qb:
                 'total_size': Tool(number=item['total_size']).change_byte(2).text,
                 'add_time': time_format(item['added_on']),
                 'completion_time': time_format(item['completion_on']),
-                'seeding_time': round(item['seeding_time'] / 60, 2),
+                'seeding_time': Tool(number=item['seeding_time']).change_second(2).text,
                 'info': []
             }
             
