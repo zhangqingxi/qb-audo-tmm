@@ -2,6 +2,7 @@
 通用工具类封装
 """
 import os
+import re
 import time
 from urllib.parse import urlparse
 
@@ -91,6 +92,25 @@ class Tool:
         else:
             self.value = self.number
         return self
+        
+    """
+    文本数据转换byte
+    :param unit 单位
+    """
+    def text_to_byte(self, text=None):
+        self.text = text
+        if re.search(r'TB', text):
+            self.value = float(text.replace('TB', '')) * 1024 * 1024 * 1024 * 1024
+        elif re.search(r'GB', text):
+            self.value = float(text.replace('GB', '')) * 1024 * 1024 * 1024
+        elif re.search(r'MB', text):
+            self.value = float(text.replace('MB', '')) * 1024 * 1024
+        elif re.search(r'KB', text):
+            self.value = float(text.replace('KB', '')) * 1024
+        else:
+            self.value = 0
+        self.value = int(self.value)    
+        return self    
 
     """
     发送通知到TG
@@ -100,6 +120,8 @@ class Tool:
     def send_message(self, item=None, rule=None):
         current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
         add_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(item['added_on']))
+        # 查询进度
+        torrent_propress = round(item['downloaded'] / item['total_size'], 2)
         text = f"当前时间: {current_time}\r\n" \
                f"下载器名: {self.qb_name}\r\n" \
                f"种子名称: {item['name']}\r\n" \
@@ -107,6 +129,7 @@ class Tool:
                f"选择大小: {Tool(number=item['size']).change_byte(2).text}\r\n" \
                f"已完成量: {Tool(number=item['completed']).change_byte(2).text}\r\n" \
                f"种子进度: {round(item['progress'] * 100, 2)} % \r\n" \
+               f"真实进度: {round(torrent_propress * 100, 2)} % \r\n" \
                f"种子状态: {item['state']}\r\n" \
                f"添加时间: {add_time}\r\n" \
                f"删除时间: {current_time}\r\n" \

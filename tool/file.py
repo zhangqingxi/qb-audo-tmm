@@ -3,11 +3,19 @@
 """
 import json
 import os
+import re
+
+
+# 修复文件名
+def repair_filename(filename=None):
+    return filename.replace(' ', '.').replace('\'', '').replace('[', '').replace(']', '').replace('(', '').replace(')', '').replace('&', '-')
 
 
 class File:
     dirname = None
     response = None
+    files = []
+    categories = {}
 
     '''
     实例化
@@ -49,8 +57,8 @@ class File:
     def write_file(self, filename=None, data=None):
         filename = self.dirname + '/' + filename
         
-        # 替换引号
-        filename = filename.replace("\'", "")
+        # 修复文件名
+        filename = repair_filename(filename=filename)
         
         with open(filename, 'w', encoding='utf-8') as f:
             if isinstance(data, dict):
@@ -59,3 +67,40 @@ class File:
                 f.write(data)
 
         return self
+        
+    '''
+    获取所有分类目录下文件
+    :param dirname 目录
+    '''
+    def get_category_dir_all_files(self, dirname=None):
+        if dirname is not None:
+            self.dirname = self.dirname + '/' + dirname
+        if os.path.isdir(self.dirname):
+            categories = os.listdir(self.dirname)
+            for category in categories:
+                filename = self.dirname + "/" + category
+                self.categories[category] = os.listdir(filename)
+        return self  
+        
+    
+    '''
+    获取目录下所有文件
+    :param dirname 目录
+    '''
+    def get_dir_all_files(self, dirname=None):
+        if dirname is not None:
+            self.dirname = self.dirname + '/' + dirname
+        if os.path.isdir(self.dirname):
+            self.files = os.listdir(self.dirname)
+        return self     
+        
+    '''    
+    文件重命名
+    '''
+    def file_rename(self):
+        for category, files in self.categories.items():
+            for file in files:
+                if re.search(r'\s|\&|\(|\)|\[|\]|\'', file):
+                    old_file = self.dirname + '/' + category + '/' + file
+                    new_file = self.dirname + '/' + category + '/' + repair_filename(filename=file)
+                    os.rename(old_file, new_file)

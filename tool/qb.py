@@ -83,7 +83,7 @@ class Qb:
     :param qb_name 配置的下载器名称
     '''
 
-    def __init__(self, qb_name=qb_name):
+    def __init__(self, qb_name=None):
         self.qb_name = qb_name
         self.url = os.getenv(qb_name + '_URL')
         self.username = os.getenv(qb_name + '_USERNAME')
@@ -160,7 +160,7 @@ class Qb:
         }
         self.curl_request(api_name=api_name, data=data)
         if self.response['code'] == 200:
-            self.active_torrent_num -= 1
+            self.total_torrent_num -= 1
             return True
         return False
 
@@ -219,119 +219,173 @@ class Qb:
     def handle_torrents(self):
         for row in self.torrents:
             category = str(row['category']).upper()
-            # 拆包种子
-            if row['state'] == 'pausedDL' or row['hash'] == 'd0c8441737460cedddc5c0d0f729f88a0c0507f3':
-                # 获取种子文件内容
-                content = self.torrent_content(torrent_hash=row['hash'])
-                # 文件不可拆分
-                if len(content) == 1:
-                    # 属于黑种站点
-                    if row['domain'] in self.black_torrent_domain:
-                        Tool(qb_name=self.qb_name).send_message(item=row, rule='文件不可拆分, 且属于黑种站点')
-                        self.delete(torrent_hash=row['hash'])
-                        continue
-
-                    limit_torrent_download_size = Tool(number=self.limit_torrent_download_size).to_byte(unit='GB').value
-                    # 文件太大
-                    if row['size'] >= limit_torrent_download_size:
-                        Tool(qb_name=self.qb_name).send_message(item=row, rule=f'文件不可拆分, 且文件大于{Tool(number=row["size"]).change_byte(decimal=2).text}')
-                        self.delete(torrent_hash=row['hash'])
-                        continue
-
-                    # 不属于热门官组、且符合选种范围、剩余磁盘空间允许
-                    group = get_torrent_group(name=row['name'])
-                    if group is not None and group not in self.all_group:
-                        Tool(qb_name=self.qb_name).send_message(item=row, rule=f'文件不可拆分, 且文件不属于热门官组')
-                    self.delete(torrent_hash=row['hash'])
-                    continue
-
-                    # 符合文件大小
-                    if Tool(number=self.free_space).to_byte('GB').value - row['size'] > Tool(number=self.less_disk_space).to_byte('GB').value:
-                        self.resume(torrent_hash=row['hash'])
-                        continue
-                    
-                # 文件可拆分
-                else:
-                    # 属于黑种站点, 或者文件超过允许下载的范围
-                    if row['domain'] in self.black_torrent_domain or row['size'] > Tool(number=self.limit_torrent_download_size).to_byte('GB').value:
-                        download_index = self.get_download_content_index(content=content)
-                        if len(download_index) > 0:
-                            no_download_index = []
-                            for item in content:
-                                if item['index'] not in download_index:
-                                    no_download_index.append(str(item['index']))
-                            no_download_index = "|".join(no_download_index)
-                            self.change_files_content_download(torrent_hash=row['hash'], index=no_download_index, priority=0)
-                            self.resume(torrent_hash=row['hash'])
-                        else:
-                            Tool(qb_name=self.qb_name).send_message(item=row, rule=f'文件可拆分, 但没有拆出适合下载的文件')
-                            self.delete(torrent_hash=row['hash'])
-                    else:
-                        self.resume(torrent_hash=row['hash'])
+            # 暂停的种子
+            if row['state'] == 'pausedDL':
+                self.handle_pause_torrents(item=row)
+            # 种子错误            
+            elif row['state'] == 'error': 
+                self.handle_error_torrents(item=row)
+            # 活跃的种子        
+            elif row['state'] in self.active_torrent_state:
+                self.handle_avtice_torrent(item=row)
+                
         return self
-    
+        
     
     '''
-    删种规则
+    处理错误的种子
+    '''
+    def handle_error_torrents(self, item=None):
+        Tool(qb_name=self.qb_name).send_message(item=item, rule='种子错误')
+        r = self.delete(item['hash'])
+        if r:
+            self.pause_torrent_num -= 1
+        return True
+
+    '''
+    处理暂停的种子
+    '''
+    def handle_pause_torrents(self, item=None):
+        
+        # 暂停种子已超过2个小时的
+        if int(time.time()) - item['added_on'] > 2 * 60 * 60:
+            Tool(qb_name=self.qb_name).send_message(item=item, rule='暂停种子已超过2个小时')
+            r = self.delete(item['hash'])
+            if r:
+                self.pause_torrent_num -= 1
+            return True
+        
+        # 获取种子文件内容
+        content = self.torrent_content(torrent_hash=item['hash'])
+        limit_torrent_download_size = Tool(number=self.limit_torrent_download_size).to_byte('GB').value
+        # 文件不可拆分
+        if len(content) == 1:
+            # 属于黑种站点
+            if item['domain'] in self.black_torrent_domain:
+                Tool(qb_name=self.qb_name).send_message(item=item, rule='文件不可拆分, 且属于黑种站点')
+                r = self.delete(torrent_hash=item['hash'])
+                if r:
+                    self.pause_torrent_num -= 1
+                return True
+
+            # 文件太大
+            if item['size'] >= limit_torrent_download_size:
+                Tool(qb_name=self.qb_name).send_message(item=item, rule=f'文件不可拆分, 且文件大于{Tool(number=item["size"]).change_byte(decimal=2).text}')
+                r = self.delete(torrent_hash=item['hash'])
+                if r:
+                    self.pause_torrent_num -= 1
+                return True
+
+            # 文件不属于热门官组
+            group = get_torrent_group(name=item['name'])
+            if group is not None and group not in self.all_group:
+                Tool(qb_name=self.qb_name).send_message(item=item, rule=f'文件不可拆分, 且文件不属于热门官组')
+                r = self.delete(torrent_hash=item['hash'])
+                if r:
+                    self.pause_torrent_num -= 1
+                return True
+
+            # 符合文件大小
+            if Tool(number=self.free_space).to_byte('GB').value - item['size'] > Tool(number=self.less_disk_space).to_byte('GB').value:
+                self.resume(torrent_hash=item['hash'])
+                return True
+            
+        # 文件可拆分
+        else:
+            # 属于黑种站点, 或者文件超过允许下载的范围
+            if item['domain'] in self.black_torrent_domain or item['size'] > limit_torrent_download_size:
+                download_index = self.get_download_content_index(content=content)
+                if len(download_index) > 0:
+                    no_download_index = []
+                    for row in content:
+                        if row['index'] not in download_index:
+                            no_download_index.append(str(row['index']))
+                    no_download_index = "|".join(no_download_index)
+                    self.change_files_content_download(torrent_hash=item['hash'], index=no_download_index, priority=0)
+                    self.resume(torrent_hash=item['hash'])
+                else:
+                    Tool(qb_name=self.qb_name).send_message(item=item, rule=f'文件可拆分, 但没有拆出适合下载的文件')
+                    r = self.delete(torrent_hash=item['hash'])
+                    if r:
+                        self.pause_torrent_num -= 1
+            else:
+                self.resume(torrent_hash=item['hash'])
+        
+        return True        
+    
+    '''
+    处理活跃的种子
     '''
     
-    def delete_torrent(self):
-        # 活跃种子数小于给定值 不执行删种
-        # if self.active_torrent_num < self.limit_active_torrent_num:
-        #     return False
-        for row in self.torrents:
+    def handle_avtice_torrent(self, item=None):
+        category = str(item['category']).upper()
+        # 等待发车、等待上车            
+        if item['state'] == 'stalledDL':
             # 10分钟不发车
-            if int(time.time()) - row['added_on'] > 10 * 60 and row['state'] == 'stalledDL':
-                self.delete(row['hash'])
-                Tool(qb_name=self.qb_name).send_message(item=row, rule='10分钟不发车')
-                row['state'] = 'delete'
-                continue
-    
-            # 种子错误
-            if row['state'] == 'error':
-                self.delete(row['hash'])
-                Tool(qb_name=self.qb_name).send_message(item=row, rule='种子错误')
-                row['state'] = 'delete'
-                continue
-    
-            # 暂停种子已超过2个小时的
-            if row['state'] == 'pausedDL' and int(time.time()) - row['added_on'] > 2 * 60 * 60:
-                self.delete(row['hash'])
-                Tool(qb_name=self.qb_name).send_message(item=row, rule='暂停种子已超过2个小时')
-                row['state'] = 'delete'
-                continue
-    
-            # HR种子跳车
-            if row['domain'] in self.hr_domain:
-                category = str(row['category']).upper()
+            if int(time.time()) - item['added_on'] > 10 * 60 and item['state'] == 'stalledDL':
+                Tool(qb_name=self.qb_name).send_message(item=item, rule='10分钟不发车')
+                self.delete(item['hash'])
+                return True    
+        else:
+            # 查询进度
+            torrent_propress = round(item['downloaded'] / item['total_size'], 2)
+             # HR种子跳车
+            if item['domain'] in self.hr_domain:
                 groups = os.getenv(category + '_HR_GROUP').split(',')
-                group = get_torrent_group(name=row['name'])
-                progress = int(int(os.getenv(category + '_HR_PROGRESS')) / 100)
-                if group in groups and len(self.torrent_content(torrent_hash=row['hash'])) == 1 and progress - row['progress'] < 0.05:
-                    self.delete(row['hash'])
-                    Tool(qb_name=self.qb_name).send_message(item=row, rule='HR种子跳车')
-                    row['state'] = 'delete'
-                    continue
+                group = get_torrent_group(name=item['name'])
+                progress = round(int(os.getenv(category + '_HR_PROGRESS')) / 100, 2)
+                if item['hash'] == '9d3e844cc089a1d37c3bf5fe3bec57e65f3c274d':
+                   return True
+                if group in groups and progress - torrent_propress < 0.05:
+                    Tool(qb_name=self.qb_name).send_message(item=item, rule='HR种子跳车')
+                    self.delete(item['hash'])
+                    return True
             
             # 查询前10次上报的平均上传速度
-            if row['state'] in self.active_torrent_state:
-                file = File(dirname='torrents', category=row['category'])
-                data = file.get_file(filename=row['name'] + '.json').response
-                if data is not None and len(data['info']) > 10:
-                    info = data['info'][len(data['info']) - 10:]
-                    total_update_speed = 0
-                    for item in info:
-                        total_update_speed += float(item['upspeed'])
-    
-                    avg_update_speed = round(total_update_speed / 10, 1)
-                    
-                    # 最近10次平均速度小于1M
-                    if avg_update_speed < 1 * 1024 * 1024:
-                        self.delete(row['hash'])
-                        Tool(qb_name=self.qb_name).send_message(item=row, rule='最近10次平均速度小于1M')
-                        row['state'] = 'delete'
-                        continue
-        return self
+            file = File(dirname='torrents', category=item['category'])
+            data = file.get_file(filename=item['name'] + '.json').response
+            if data is not None and len(data['info']) > 10:
+                info = data['info'][len(data['info']) - 10:]
+                total_update_speed = 0
+                for row in info:
+                    total_update_speed += float(row['upspeed'])
+                avg_update_speed = round(total_update_speed / 10, 1)
+                # 最近10次平均速度小于1M
+                if avg_update_speed < 1 * 1024 * 1024:
+                    Tool(qb_name=self.qb_name).send_message(item=item, rule='最近10次平均速度小于1M')
+                    self.delete(item['hash'])
+                return True   
+                
+            
+            if item['state'] == 'downloading':
+                # 种子进度 3分钟 进度小于0.05
+                if torrent_propress < 0.05 and int(time.time()) - item['added_on'] > 3 * 60:
+                    # 下载人数
+                    if item['num_incomplete'] < 40:
+                        Tool(qb_name=self.qb_name).send_message(item=item, rule=f'真实进度{torrent_propress * 100}%, 种子下载人数{item["num_incomplete"]}')
+                        self.delete(item['hash'])
+                        return True
+                    # 连接数
+                    # leechs = os.getenv(category + '_LEECHS')
+                    # leechs = 40 if leechs is None else int(leechs)
+                    # if torrent_propress < 0.05 and item['num_incomplete'] < leechs:
+                    #     Tool(qb_name=self.qb_name).send_message(item=item, rule=f'进度{torrent_propress * 100}%, 下载人数小于{leechs}, 当前下载人数{item["num_incomplete"]}')
+                    #     self.delete(item['hash'])
+                    #     return True
+                
+                
+                    # 下载人数
+
+                    # torrent_properties = self.properties(torrent_hash=item['hash'])
+                    # # 种子创建时间 creation_date
+                    # torrent_create_time = torrent_properties['creation_date'] if torrent_properties['creation_date'] > 0 else item['added_on']
+                    # # 当前系统时间
+                    # current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                    # if torrent_propress < 0.05 and item['num_incomplete'] < 40 and current_time - torrent_create_time > 2 * 60:
+                    #     Tool(qb_name=self.qb_name).send_message(item=item, rule=f'进度{torrent_propress * 100}%, 种子下载人数{item["num_incomplete"]}')
+                    #     self.delete(item['hash'])
+                    #     return True
+        return True
     
     '''
     更改文件内容下载
