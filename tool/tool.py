@@ -140,7 +140,7 @@ class Tool:
                f"站点域名: {item['domain']}\r\n" \
                f"删种规则: {rule}\r\n"
 
-        file = File(dirname="logs", category=item['category'])
+        file = File(dirname="logs", category_dir=item['domain'])
         filename = time.strftime("%Y-%m-%d", time.localtime()) + '.log'
         data = file.get_file(filename=filename).response
         if data is None:

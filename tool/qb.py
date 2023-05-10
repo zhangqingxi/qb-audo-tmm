@@ -342,7 +342,7 @@ class Qb:
                     return True
             
             # 查询前10次上报的平均上传速度
-            file = File(dirname='torrents', category=item['category'])
+            file = File(dirname='torrents', category_dir=item['domain'])
             data = file.get_file(filename=item['name'] + '.json').response
             if data is not None and len(data['info']) > 10:
                 info = data['info'][len(data['info']) - 10:]
@@ -351,12 +351,11 @@ class Qb:
                     total_update_speed += float(row['upspeed'])
                 avg_update_speed = round(total_update_speed / 10, 1)
                 # 最近10次平均速度小于1M
-                if avg_update_speed < 1 * 1024 * 1024:
+                if avg_update_speed < 1 * 1024 * 1024 and self.active_torrent_num > self.limit_active_torrent_num:
                     Tool(qb_name=self.qb_name).send_message(item=item, rule='最近10次平均速度小于1M')
                     self.delete(item['hash'])
                 return True   
                 
-            
             if item['state'] == 'downloading':
                 # 种子进度 3分钟 进度小于0.05
                 if torrent_propress < 0.05 and int(time.time()) - item['added_on'] > 3 * 60:
@@ -481,7 +480,7 @@ class Qb:
             }
     
         # 记录种子
-        file = File(dirname='torrents', category=item['category'])
+        file = File(dirname='torrents', category_dir=item['domain'])
     
         data = file.get_file(filename=item['name'] + '.json').response
     

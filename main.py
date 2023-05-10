@@ -27,13 +27,13 @@ def args():
 
 # 统计监控
 def monitor():
-    Monitor().get_today_delete_torrents()
+    Monitor().analysis_torrent()
     
     
 # 管理种子
 def manage_torrents():
-    download_tools = os.getenv('DOWNLOAD_TOOLS').split(',')
-    if qb_name not in download_tools:
+    downloaders = os.getenv('ALL_DOWNLOADERS').split(',')
+    if qb_name not in downloaders:
         print('没有找此下载器配置, 请检查配置文件')
         exit(-1)
     qb = Qb(qb_name=qb_name)

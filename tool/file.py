@@ -20,15 +20,15 @@ class File:
     '''
     实例化
     :param dirname 目录
-    :param category 分类目录
+    :param category_dir 分类目录
     '''
-    def __init__(self, dirname=None, category=None):
+    def __init__(self, dirname=None, category_dir=None):
         self.dirname = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if dirname is not None:
             self.dirname += '/' + str(dirname)
 
-        if category is not None:
-            self.dirname += '/' + str(category)
+        if category_dir is not None:
+            self.dirname += '/' + str(category_dir)
 
         if not os.path.exists(self.dirname):
             os.makedirs(self.dirname)
