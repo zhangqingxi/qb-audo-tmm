@@ -91,7 +91,7 @@ class Qb:
         self.disk_space = int(os.getenv(qb_name + '_DISK_SPACE'))
         self.less_disk_space = int(os.getenv(qb_name + '_LESS_DOSK_SPACE'))
         self.limit_active_torrent_num = int(os.getenv(qb_name + '_LIMIT_ACTIVE_TORRENT_NUM'))
-        self.active_torrent_state = ['uploading', 'downloading', 'stalledDL', 'stalledUP', 'forcedUP', 'forcedDL']
+        self.active_torrent_state = ['uploading', 'downloading']
         self.limit_split_torrent_download_size = int(os.getenv(self.qb_name + '_LIMIT_SPLIT_TORRENT_DOWNLOAD_SIZE'))
         self.limit_black_torrent_download_size = int(os.getenv(self.qb_name + '_LIMIT_BLACK_TORRENT_DOWNLOAD_SIZE'))
         self.limit_torrent_download_size = int(os.getenv(self.qb_name + '_LIMIT_TORRENT_DOWNLOAD_SIZE'))
@@ -226,7 +226,7 @@ class Qb:
             elif row['state'] == 'error': 
                 self.handle_error_torrents(item=row)
             # 活跃的种子        
-            elif row['state'] in self.active_torrent_state:
+            elif row['state'] in ['uploading', 'downloading', 'stalledDL', 'stalledUP', 'forcedDL', 'forcedUP']:
                 self.handle_avtice_torrent(item=row)
                 
         return self
@@ -246,7 +246,6 @@ class Qb:
     处理暂停的种子
     '''
     def handle_pause_torrents(self, item=None):
-        
         # 暂停种子已超过2个小时的
         if int(time.time()) - item['added_on'] > 2 * 60 * 60:
             Tool(qb_name=self.qb_name).send_message(item=item, rule='暂停种子已超过2个小时')
@@ -334,8 +333,6 @@ class Qb:
                 groups = os.getenv(category + '_HR_GROUP').split(',')
                 group = get_torrent_group(name=item['name'])
                 progress = round(int(os.getenv(category + '_HR_PROGRESS')) / 100, 2)
-                if item['hash'] == '9d3e844cc089a1d37c3bf5fe3bec57e65f3c274d':
-                   return True
                 if group in groups and progress - torrent_propress < 0.05:
                     Tool(qb_name=self.qb_name).send_message(item=item, rule='HR种子跳车')
                     self.delete(item['hash'])
@@ -349,6 +346,7 @@ class Qb:
                 total_update_speed = 0
                 for row in info:
                     total_update_speed += float(row['upspeed'])
+                
                 avg_update_speed = round(total_update_speed / 10, 1)
                 # 最近10次平均速度小于1M
                 if avg_update_speed < 1 * 1024 * 1024 and self.active_torrent_num > self.limit_active_torrent_num:

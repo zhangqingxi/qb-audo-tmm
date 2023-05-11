@@ -39,6 +39,8 @@ class File:
     '''
     def get_file(self, filename=None):
         filename = self.dirname + '/' + filename
+         # 修复文件名
+        filename = repair_filename(filename=filename)
         if os.path.exists(filename):
             f = open(filename, 'r', encoding='utf-8')
             content = f.read()
