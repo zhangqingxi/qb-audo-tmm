@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 sys.path.append(os.path.dirname((os.path.dirname(os.path.abspath(__file__)))))
 from tool.qb import Qb
 from tool.monitor import Monitor
+from tool.request import Request
 
 qb_name = None
 

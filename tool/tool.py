@@ -91,6 +91,7 @@ class Tool:
             self.value = self.number * 1024
         else:
             self.value = self.number
+        self.value = int(self.value)    
         return self
         
     """
