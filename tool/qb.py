@@ -185,7 +185,22 @@ class Qb:
     :param delete_files 是否连带文件一起删除
     '''
 
-    def delete(self, item=None, delete_files=None):
+    def delete(self, item=None, delete_files=None, rule=None):
+        category = str(item['category']).upper()
+        # 活动的种子
+        if check_hr_group(domain=item['domain'], name=item['name'], category=category) == False and item['state'] in ['uploading', 'downloading']:
+            # 下一次上报时间 每30分钟会上报 岛每45分钟
+            time_active = int(time.time()) - item['added_on']
+            if item['category'] == 'chdbits':
+                time_second = time_active % 5400
+            else:
+                time_second = time_active % 1800
+            if time_second > 300:
+                return True
+        
+        
+        Tool(qb_name=self.qb_name).send_message(item=item, rule=rule)
+        
         api_name = '/api/v2/torrents/delete'
         data = {
             'hashes': item['hash'],
@@ -273,8 +288,7 @@ class Qb:
     处理错误的种子
     '''
     def handle_error_torrents(self, item=None):
-        Tool(qb_name=self.qb_name).send_message(item=item, rule='种子错误')
-        self.delete(item=item)
+        self.delete(item=item, rule='种子错误')
         return True
 
     '''
@@ -284,41 +298,38 @@ class Qb:
         category = str(item['category']).upper()
         # 属于站点官组种子
         if check_group(name=item['name'], category=category):
-            if int(time.time()) - item['added_on'] > 2 * 60 * 60:
-                Tool(qb_name=self.qb_name).send_message(item=item, rule='官方种子暂停已超过2小时')
-                self.delete(item=item)
+            if int(time.time()) - item['added_on'] > 30 * 60:
+                self.delete(item=item, rule='官方种子暂停已超过30分钟')
                 return True 
         else:
             if int(time.time()) - item['added_on'] > 4 * 60:
-                Tool(qb_name=self.qb_name).send_message(item=item, rule='非官方种子暂停已超过4分钟')
-                self.delete(item=item)
+                self.delete(item=item, rule='非官方种子暂停已超过4分钟')
                 return True
         # HR种子
         hr_torrent = check_hr_group(domain=item['domain'], name=item['name'], category=category)
         if hr_torrent and item['total_size'] < 20 * 1024 * 1024 * 1024:
-            Tool(qb_name=self.qb_name).send_message(item=item, rule='属于HR种子, 但文件小于20GB')
-            self.delete(item=item)
+            self.delete(item=item, rule='属于HR种子, 但文件小于20GB')
             return True
-        
-        # 空只要官组的种子
-        if item['category'] == 'hdsky' and check_group(name=item['name'], category=category) == False:
-            Tool(qb_name=self.qb_name).send_message(item=lower_income_torrent, rule='不是官组种子')
-            self.delete(item=lower_income_torrent)   
-            return True
-                
         # 获取种子文件内容
         content = self.torrent_content(torrent_hash=item['hash'])
         limit_torrent_download_size = Tool(number=self.limit_torrent_download_size).to_byte(unit='GB').value
         download_size = item['total_size']
         black_torrent_domain = item['domain'] in self.black_torrent_domain
         
+        # 如果设置了分类种子大小
+        limit_category_torrent_download_size = os.getenv(category + '_LIMIT_LESS_DOWNLOAD_SIZE')
+        if limit_category_torrent_download_size is not None:
+            limit_torrent_download_size = Tool(number=int(limit_category_torrent_download_size)).to_byte(unit='GB').value
+            if limit_torrent_download_size > item['total_size']:
+                self.delete(item=item, rule=f'站点已设置最小入种体积{limit_category_torrent_download_size}GB')   
+                return True
+        
         # 文件不可拆分
         if len(content) == 1:
             # 属于黑种站点
             if black_torrent_domain:
-                Tool(qb_name=self.qb_name).send_message(item=item, rule='文件不可拆分, 且属于黑种站点')
-                self.delete(item=item)
-                
+                self.delete(item=item, rule='文件不可拆分, 且属于黑种站点')
+                return True
         # 文件可拆分
         else:
             # 属于黑种站点, 或者属于HR种子, 或者文件超过允许下载的范围、获取可下载的文件
@@ -333,38 +344,21 @@ class Qb:
                     no_download_index = "|".join(no_download_index)
                     self.change_files_content_download(torrent_hash=item['hash'], index=no_download_index, priority=0)
                 elif black_torrent_domain:
-                    Tool(qb_name=self.qb_name).send_message(item=item, rule='文件可拆分, 但没有拆出适合下载的文件')
-                    self.delete(torrent_hash=item['hash'], state=item['state'])
+                    self.delete(item=item, rule='文件可拆分, 但没有拆出适合下载的文件')
+                    return True
                     
         # 属于站点官组种子
-        if check_group(name=item['name'], category=category) and limit_torrent_download_size >= download_size:  
+        if check_group(name=item['name'], category=category) and limit_torrent_download_size >= download_size: 
+            filter_torrent_name = []
             while self.check_free_space_enough(download_size=download_size) == False:
-                lower_income_torrent = self.get_lower_income_torrent(filter_category=['hdsky'])
-                Tool(qb_name=self.qb_name).send_message(item=lower_income_torrent, rule='官组种子进来了, 删除低收益种子')
-                self.delete(item=lower_income_torrent)
-                    
+                lower_income_torrent = self.get_lower_income_torrent(filter_category=['hdsky'], filter_name=filter_torrent_name)
+                filter_torrent_name.append(lower_income_torrent['name'])
+                self.delete(item=lower_income_torrent, rule='官组种子进来了, 删除低收益种子')
+                
         # 剩余空间是否允许
         if self.check_free_space_enough(download_size=download_size):
             self.resume(item=item)
         return True      
-        
-    '''
-    当前低收益的种子
-    '''
-    def get_lower_income_torrent(self, filter_category=[]):
-        lower_income_torrent = {}
-        for item in self.torrents:
-            if item['category'] in filter_category:
-                continue
-            if item['state'] == 'pausedDL':
-                continue
-            if len(lower_income_torrent) == 0:
-                lower_income_torrent = item
-                continue
-            
-            if lower_income_torrent['upspeed'] > item['upspeed']:
-                lower_income_torrent = item
-        return lower_income_torrent;
     
     '''
     处理活跃的种子
@@ -372,57 +366,45 @@ class Qb:
     
     def handle_avtice_torrent(self, item=None):
         category = str(item['category']).upper()
-        # 等待发车、等待上车            
-        if item['state'] == 'stalledDL':
+        # 最近几次平均速度
+        avg_up_speed = self.get_recently_avg_upspeed(item=item)
+         # 查询进度
+        torrent_propress = round(item['downloaded'] / item['total_size'], 2)
+        
+         # 黑种站点跳车    
+        if item['domain'] in self.black_torrent_domain:
+            # 3倍分享率跳车
+            if item['uploaded'] / item['total_size'] > 3:
+                self.delete(item=item, rule='3倍分享率跳车')
+                return True
+            # 无效做种
+            if item['completion_on'] > 0 and item['state'] in ['uploading', 'stalledUP']:
+                # 超过一个小时的时候，并且上传小于128kb的种子
+                if type(avg_up_speed) == int and avg_up_speed <= 128 * 1024 and int(time.time()) - item['completion_on'] >= 60 * 60:
+                    self.delete(item=item, rule='做种60分钟上传速度小于128KB')
+                    return True    
+            return True    
+            
+        # HR种子跳车
+        if check_hr_group(domain=item['domain'], name=item['name'], category=category):
+            hr_download_size = item['total_size'] * float(int(os.getenv(category + '_HR_PROGRESS')) / 100)
+            if hr_download_size - item['downloaded'] <= 5 * 1024 *1024 * 1024:
+                self.delete(item=item, rule='HR种子跳车')
+                return True
+        
+        # 等待发车            
+        if item['state'] == 'stalledDL' and item['progress'] <= 0.05:
             # 非官组 10分钟不发车
             if check_group(name=item['name'], category=category) == False and int(time.time()) - item['added_on'] > 10 * 60:
-                Tool(qb_name=self.qb_name).send_message(item=item, rule='非官组, 10分钟不发车')
-                self.delete(item=item)
+                self.delete(item=item, rule='非官组, 10分钟不发车')
                 return True    
         else:
-            
-            # 空只能3倍分享率跳车    
-            if item['category'] == 'hdsky':
-                # 3倍分享率跳车
-                if item['uploaded'] / item['total_size'] > 3:
-                    Tool(qb_name=self.qb_name).send_message(item=item, rule='3倍分享率跳车')
-                    self.delete(item=item)
+            # 最近10次平均速度小于1M
+            if type(avg_up_speed) == int and avg_up_speed < 1 * 1024 * 1024:
+                # 种子处于活动状态、活动种子数且小于限制活动种子数 
+                if item['state'] in ['uploading', 'downloading'] and self.pause_torrent_num == 0 and self.active_torrent_num < self.limit_active_torrent_num:
                     return True
-                # 无效做种
-                if item['completion_on'] > 0 and item['state'] in ['uploading', 'stalledUP']:
-                    # 超过一个半小时的时候，并且上传小于512kb的种子
-                    if item['upspeed'] <= 512 * 1024 and item['completion_on'] >= 1.5 * 60 * 60:
-                        Tool(qb_name=self.qb_name).send_message(item=item, rule='做种90分钟上传速度小于512KB')
-                        self.delete(item=item)
-                        return True    
-                return True    
-            
-            # 查询进度
-            torrent_propress = round(item['downloaded'] / item['total_size'], 2)
-             # HR种子跳车
-            if check_hr_group(domain=item['domain'], name=item['name'], category=category):
-                hr_download_size = item['total_size'] * float(int(os.getenv(category + '_HR_PROGRESS')) / 100)
-                if hr_download_size - item['downloaded'] <= 5 * 1024 *1024 * 1024:
-                    Tool(qb_name=self.qb_name).send_message(item=item, rule='HR种子跳车')
-                    self.delete(item=item)
-                    return True
-            
-            # 查询前10次上报的平均上传速度
-            file = File(dirname='torrents', category_dir=item['domain'])
-            data = file.get_file(filename=item['name'] + '.json').response
-            if data is not None and len(data['info']) > 10:
-                info = data['info'][len(data['info']) - 10:]
-                total_update_speed = 0
-                for row in info:
-                    total_update_speed += float(row['upspeed'])
-                avg_update_speed = int(total_update_speed / 10)
-                # 最近10次平均速度小于1M
-                if avg_update_speed < 1 * 1024 * 1024:
-                    # 种子处于活动状态、活动种子数且小于限制活动种子数 
-                    if item['state'] in ['uploading', 'downloading'] and self.pause_torrent_num == 0 and self.active_torrent_num < self.limit_active_torrent_num:
-                        return True
-                    Tool(qb_name=self.qb_name).send_message(item=item, rule='最近10次平均速度小于1M')
-                    self.delete(item=item)
+                self.delete(item=item, rule='最近10次平均速度小于1M')
                 return True   
                 
             if item['state'] == 'downloading' :
@@ -432,23 +414,20 @@ class Qb:
                         # 下载人数
                         num_incomplete = int(os.getenv(category + '_INCOMPLETE'))
                         if item['num_incomplete'] < num_incomplete:
-                            Tool(qb_name=self.qb_name).send_message(item=item, rule=f'真实进度{torrent_propress * 100}%, 设置下载人数数{num_incomplete}, 当前种子下载人数{item["num_incomplete"]}')
-                            self.delete(item=item)
+                            self.delete(item=item, rule=f'真实进度{round(torrent_propress * 100, 2)}%, 设置下载人数数{num_incomplete}, 当前种子下载人数{item["num_incomplete"]}')
                             return True
                             
                         # 连接数
-                        num_leechs = int(os.getenv(category + '_INCOMPLETE'))
+                        num_leechs = int(os.getenv(category + '_LEECHS'))
                         if item['num_leechs'] < num_leechs:
-                            Tool(qb_name=self.qb_name).send_message(item=item, rule=f'真实进度{torrent_propress * 100}%, 设置连接数{num_leechs}, 当前种子连接数{item["num_leechs"]}')
-                            self.delete(item=item)
+                            self.delete(item=item, rule=f'真实进度{round(torrent_propress * 100, 2)}%, 设置连接数{num_leechs}, 当前种子连接数{item["num_leechs"]}')
                             return True 
                 # 种子添加超过3分钟
                 else:
                     ratio =  round(item['dlspeed'] / item['upspeed'], 2)
                     # 不是官组、属于黑车
                     if check_group(name=item['name'], category=category) == False and item['dlspeed'] > 10 * 1024 * 1024 and item['upspeed'] < 2 * 1024 * 1024 and ratio > 1.5:
-                        Tool(qb_name=self.qb_name).send_message(item=item, rule=f'不是官组, 且属于黑车')
-                        self.delete(item=item)
+                        self.delete(item=item, rule=f'不是官组, 且属于黑车')
                         return True 
         return True
     
@@ -528,6 +507,41 @@ class Qb:
                 file_index.append(row['index'])
                 file_content.append(row['name'])
         return {'file_index': file_index, 'file_content': file_content, 'file_size': file_size}
+    
+    '''
+    当前低收益的种子
+    '''
+    def get_lower_income_torrent(self, filter_category=[], filter_name=[]):
+        lower_income_torrent = {}
+        for item in self.torrents:
+            if item['category'] in filter_category:
+                continue
+            if item['name'] in filter_name:
+                continue
+            if item['state'] == 'pausedDL':
+                continue
+            if len(lower_income_torrent) == 0:
+                lower_income_torrent = item
+                continue
+            
+            if lower_income_torrent['upspeed'] > item['upspeed']:
+                lower_income_torrent = item
+        return lower_income_torrent
+    
+    '''
+    最近几次的上传速度
+    '''
+    def get_recently_avg_upspeed(self, item=None, number=10):
+        file = File(dirname='torrents', category_dir=item['domain'])
+        data = file.get_file(filename=item['name'] + '.json').response
+        if data is not None and len(data['info']) > number:
+            info = data['info'][len(data['info']) - number:]
+            total_update_speed = 0
+            for row in info:
+                total_update_speed += float(row['upspeed'])
+            avg_update_speed = int(total_update_speed / number)
+            return avg_update_speed
+        return False    
         
     '''
     检查剩余空间是否允许
