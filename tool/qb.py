@@ -105,6 +105,8 @@ class Qb:
     all_group = []
     # 已选择文件下载总空间大小  byte 字节
     total_download_choose_file_size = 0
+    # 排除不删种的站点
+    torrent_filter_delete_domain = 0
 
     '''
     实例化
@@ -127,7 +129,8 @@ class Qb:
         self.black_torrent_domain = os.getenv('BLACK_TORRENT_DOMAIN').split(',')
         self.hr_domain = os.getenv('HR_DOMAIN').split(',')
         self.all_group = os.getenv('ALL_GROUP').split(',')
-
+        self.torrent_filter_delete_domain = os.getenv('TORRENT_FILTER_DELETE_DOMAIN').split(',')
+        
     '''
     登录
     '''
@@ -351,7 +354,7 @@ class Qb:
         if check_group(name=item['name'], category=category) and limit_torrent_download_size >= download_size: 
             filter_torrent_name = []
             while self.check_free_space_enough(download_size=download_size) == False:
-                lower_income_torrent = self.get_lower_income_torrent(filter_category=['hdsky'], filter_name=filter_torrent_name)
+                lower_income_torrent = self.get_lower_income_torrent(filter_name=filter_torrent_name)
                 filter_torrent_name.append(lower_income_torrent['name'])
                 self.delete(item=lower_income_torrent, rule='官组种子进来了, 删除低收益种子')
                 
@@ -511,10 +514,10 @@ class Qb:
     '''
     当前低收益的种子
     '''
-    def get_lower_income_torrent(self, filter_category=[], filter_name=[]):
+    def get_lower_income_torrent(self, filter_name=[]):
         lower_income_torrent = {}
         for item in self.torrents:
-            if item['category'] in filter_category:
+            if item['domain'] in self.torrent_filter_delete_domain:
                 continue
             if item['name'] in filter_name:
                 continue
