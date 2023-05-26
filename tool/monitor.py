@@ -8,6 +8,7 @@ from tool.tool import Tool
 from tool.file import File
 from tool.request import Request
 
+
 class Monitor:
     # 监控 TG TOKEN
     tg_token = ''
@@ -26,7 +27,6 @@ class Monitor:
     domain_content = {}
     # 所有数据
     total_content = {}
-    
     
     '''
     实例化
@@ -194,7 +194,6 @@ class Monitor:
             if item['date'] not in content.keys():
                 content[item['date']] = {}
             
-            
             if len(content[item['date']]) == 0:
                 content[item['date']] = {
                     'rx': item['rx'],
@@ -229,13 +228,12 @@ class Monitor:
                 file_content = File(dirname='logs', category_dir=category).get_file(filename=filename) 
                 file_content = file_content.response.replace(' ', '').replace('↑', '').replace('↓', '')
                 content = re.findall(r'下载器名:(.*)?[\s\S]*?流量统计:(.*)?[\s\S]*?站点域名:(.*)?', file_content)
-                date = filename.replace('.log', '')
                 for row in content:
                     downloader = row[0]
                     rxtx = row[1].split('/')
                     domain = row[2]
-                    #TX为上行流量
-                    #RX为下行流量
+                    # TX为上行流量
+                    # RX为下行流量
                     self.file_content.append({
                         'name': downloader,
                         'category': category,
@@ -245,4 +243,4 @@ class Monitor:
                         'rx': Tool().text_to_byte(text=rxtx[1]).value
                     })
         return self
-        
+    

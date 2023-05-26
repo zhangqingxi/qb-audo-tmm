@@ -39,7 +39,7 @@ class File:
     '''
     def get_file(self, filename=None):
         filename = self.dirname + '/' + filename
-         # 修复文件名
+        # 修复文件名
         filename = repair_filename(filename=filename)
         if os.path.exists(filename):
             f = open(filename, 'r', encoding='utf-8')
@@ -84,7 +84,6 @@ class File:
                 self.categories[category] = os.listdir(filename)
         return self  
         
-    
     '''
     获取目录下所有文件
     :param dirname 目录
@@ -102,7 +101,7 @@ class File:
     def file_rename(self):
         for category, files in self.categories.items():
             for file in files:
-                if re.search(r'\s|\&|\(|\)|\[|\]|\'', file):
+                if re.search(r'\s|&|\(|\)|\[|]|\'', file):
                     old_file = self.dirname + '/' + category + '/' + file
                     new_file = self.dirname + '/' + category + '/' + repair_filename(filename=file)
                     os.rename(old_file, new_file)

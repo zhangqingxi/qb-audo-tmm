@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 sys.path.append(os.path.dirname((os.path.dirname(os.path.abspath(__file__)))))
 from tool.qb import Qb
 from tool.monitor import Monitor
-from tool.request import Request
 
 qb_name = None
 
@@ -42,7 +41,7 @@ def manage_torrents():
 
     tries = 1
     if qb.cookie is None and tries <= 5:
-        tries = tries + 1
+        tries += 1
         qb.login()
 
     if qb.cookie is None:
