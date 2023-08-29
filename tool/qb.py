@@ -218,8 +218,9 @@ class Qb:
     '''
 
     def delete(self, item=None, delete_files=None, rule=None):
-        if item['hash'] in ['19a28721af562e743a03441bbf81e4ac276f7be0']:
+        if item['state'] in ['forcedDL', 'forcedUP']
             return True;
+            
         # 发送TG消息
         Tool(qb_name=self.qb_name).send_message(item=item, rule=rule)
         

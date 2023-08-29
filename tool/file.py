@@ -8,7 +8,7 @@ import re
 
 # 修复文件名
 def repair_filename(filename=None):
-    return filename.replace(' ', '.').replace('\'', '').replace('[', '').replace(']', '').replace('(', '').replace(')', '').replace('&', '-')
+    return filename.replace(' ', '.').replace('\'', '').replace('[', '').replace(']', '').replace('(', '').replace(')', '').replace('&', '-').replace('}}', '}').replace('{{', '{')
 
 
 class File:

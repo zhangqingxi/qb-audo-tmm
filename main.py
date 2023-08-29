@@ -32,6 +32,9 @@ def monitor():
     
 # 管理种子
 def manage_torrents():
+    if qb_name == 'NC_18':
+        print('None')
+        exit(-1)
     downloaders = os.getenv('ALL_DOWNLOADERS').split(',')
     if qb_name not in downloaders:
         print('没有找此下载器配置, 请检查配置文件')
