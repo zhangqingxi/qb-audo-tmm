@@ -218,7 +218,7 @@ class Qb:
     '''
 
     def delete(self, item=None, delete_files=None, rule=None):
-        if item['state'] in ['forcedDL', 'forcedUP']
+        if item['state'] in ['forcedDL', 'forcedUP']:
             return True;
             
         # 发送TG消息
