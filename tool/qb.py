@@ -474,12 +474,15 @@ class Qb:
             if not is_official_group and int(time.time()) - item['added_on'] > 10 * 60:
                 self.delete(item=item, rule='非官组, 10分钟不发车')
                 return True    
+            elif int(time.time()) - item['added_on'] > 1 * 60 * 60:   
+                self.delete(item=item, rule='官组, 60分钟不发车')
+                return True 
         else:
             # 最近10次平均速度小于1MB
             if type(avg_up_speed) == int and avg_up_speed < 512 * 1024 and item['upspeed'] < 512 * 1024:
                 # 种子处于活动状态、活动种子数且小于限制活动种子数 
-                if item['state'] in ['uploading', 'downloading'] and self.pause_torrent_num == 0 and self.active_torrent_num < self.limit_active_torrent_num:
-                    return True
+                # if item['state'] in ['uploading', 'downloading'] and self.pause_torrent_num == 0 and self.active_torrent_num < self.limit_active_torrent_num:
+                    # return True
                 self.delete(item=item, rule='最近10次平均速度小于1MB')
                 return True
                 
@@ -709,7 +712,7 @@ class Qb:
         file = File(dirname='torrents', category_dir=item['domain'])
         
         data = file.get_file(filename=item['name'] + '.json').response
-       
+        
         if data is None:
             data = {
                 'name': item['name'],
