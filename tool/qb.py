@@ -208,7 +208,6 @@ class Qb:
         }
         self.curl_request(api_name=api_name, data=data)
         if self.response['code'] == 200:
-             return json.loads(self.response['content'])
         return {}
     
     '''
@@ -218,9 +217,14 @@ class Qb:
     '''
 
     def delete(self, item=None, delete_files=None, rule=None):
+        # 过滤删除的站点
+        if item['domain'] in self.torrent_filter_delete_domain:
+            return True;
+        
+        # 种子处于强制执行状态
         if item['state'] in ['forcedDL', 'forcedUP']:
             return True;
-            
+        
         # 发送TG消息
         Tool(qb_name=self.qb_name).send_message(item=item, rule=rule)
         
@@ -654,8 +658,6 @@ class Qb:
             filter_name = []
         lower_income_torrent = {}
         for item in self.torrents:
-            if item['domain'] in self.torrent_filter_delete_domain:
-                continue
             if item['name'] in filter_name:
                 continue
             if item['state'] == 'pausedDL':
