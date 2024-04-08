@@ -208,8 +208,8 @@ class Qb:
         }
         self.curl_request(api_name=api_name, data=data)
         if self.response['code'] == 200:
+             return json.loads(self.response['content'])
         return {}
-    
     '''
     删除种子
     :param item 种子数据
